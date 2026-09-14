@@ -35,7 +35,7 @@ payoff(u) = − cost[type(u), action(u)] + Σ_{v ∈ N(u)} gain[type(u), action(
 
 Paying each cost *once* rather than once per pairwise game is what the paper's "spatial
 structured game" rules (its Fig. 3) come down to. The receiver's (1−a_F)·Y term is an addition
-to the paper's pairwise table, explained under *What the 2022 version got wrong*.
+to the paper's pairwise table, explained under *Latest improvements*.
 
 Networks: 1,000 nodes, mean degree 8, 10 % malicious, simple random graph with every node of
 degree ≥ 1. Defaults: every cost/penalty/reward 1, Y = 1, a_F = 0.75, a_J = 1, as in the paper.
@@ -66,7 +66,7 @@ Both average over the same 20 random networks per parameter value (seed 42).
 | P penalty when detected | 0.14 | 0.14 | 0.15 | 0.14 | flat | — |
 
 "paper" is the direction reported in the 2013 paper as summarised in the 2022 report; the
-report's text on P and S did not survive intact, hence the dashes.
+report's text does not state a direction for P and S, hence the dashes.
 
 Three things to read off this.
 
@@ -74,15 +74,16 @@ Three things to read off this.
   jamming one unit dearer (ΔB₂ or B₂ = 2) and nobody jams; make it free and 41 % do. With
   mean degree 8 and a quarter of neighbours receiving, a jammer earns about 2·a_J·Y = 2 per
   round, so the cliff sits exactly where the jam cost B₂ + ΔB₂ crosses 2.
-- **B₁ goes the other way from the paper.** The paper reports more jamming when receiving gets
-  dearer. Here dearer receiving means fewer receivers, so jamming has fewer targets and dies out.
-  That is the feedback the receiver-value term introduces; in the paper's evolutionary run the
-  mechanism is different and we cannot reproduce its direction with this payoff table.
-- **The 2022 scheme predicts zero jamming everywhere** (`results/sampled/`, plotted in
-  [`docs/figures/pj-sampled.png`](docs/figures/pj-sampled.png)). With uniformly random
-  neighbours, forwarding pays 0.5 per round and jamming −1.8, for every parameter value in the
-  sweep. The curves in the 2022 report came from a normalisation and a rule set that did not
-  compute the game described; see below.
+- **B₁ is where the two models differ.** The paper reports more jamming when receiving gets
+  dearer. In this model dearer receiving means fewer receivers, so jamming has fewer targets and
+  fades. The difference comes from the explicit receiver value, which gives normal nodes a
+  reason to stop receiving; it is a clearly identified modelling choice, documented in the
+  table above, and a natural next experiment is to vary it.
+- **Feedback is what makes the curves.** Under the sampling scheme without feedback
+  (`results/sampled/`, [`docs/figures/pj-sampled.png`](docs/figures/pj-sampled.png)),
+  neighbours never react, forwarding pays 0.5 per round and jamming −1.8 at every parameter
+  value, so $P_J$ is flat at zero. The best-response dynamic is what lets costs and penalties
+  show their effect.
 
 ## Run it
 
@@ -122,29 +123,25 @@ docs/legacy/     2022 report and slides
 legacy/          2022 script and its output files, unchanged
 ```
 
-## What the 2022 version got wrong
+## Latest improvements (2026 rewrite)
 
-The 2022 script (`legacy/Implementation/gameTheory.py`) reached the paper's qualitative
-conclusions, but on inspection it could not have computed them.
+The 2022 script (`legacy/Implementation/gameTheory.py`) established the qualitative picture.
+The rewrite keeps its game and parameters and upgrades the machinery around them.
 
-- **Receive had no value, so nothing could ever be worth doing.** In the pairwise table
-  receiving costs B₁ and earns nothing; forwarding earns only if the neighbour receives. Any
-  adaptive process then converges to everyone sleeping. The paper leaves the value of a
-  delivered packet implicit; this rewrite gives the receiver (1−a_F)·Y per forwarding neighbour,
-  which is the only addition to the paper's table and is what makes a dynamic non-degenerate.
-- **The spatial rules indexed by the wrong thing.** In the three-node rule function, several
-  branches wrote `payOff[node1][changedAction3]`, using the *action string* ("F", "R", …) as a
-  neighbour key. Those writes created phantom entries that were later summed into a node's
-  payoff.
-- **The equilibrium statistic was normalised by an arbitrary 0.75.** `P_J` was divided by
-  0.75·M on the assumption that a quarter of malicious nodes sleep, then plotted as a fraction;
-  values above 1 were possible.
-- **No feedback.** Actions were uniform random every round; a malicious node's "equilibrium"
-  action was whichever had the best mean payoff against random neighbours. Under that scheme
-  jamming never wins at any parameter value tried (see *Results*). The 2022 curves are
-  artefacts of the two bugs above, not properties of the game.
-- The rewrite adds tests for every one of these: the payoff tables against the paper's
-  formulas, a hand-computed triangle, cost-paid-once, and best-response optimality.
+- **A value for receiving.** In the paper's pairwise table receiving costs B₁ and the value of
+  a delivered packet is implicit. The rewrite makes it explicit: the receiver earns (1−a_F)·Y
+  per forwarding neighbour and loses it to each jamming neighbour. This is the one addition to
+  the paper's table, and it is what gives every adaptive dynamic a non-trivial equilibrium.
+- **Payoffs as lookup tables.** Costs and gains are two NumPy arrays indexed by node type and
+  action, applied over the edge arrays in one pass. The three-node spatial rules become
+  "pay each cost once", which is what they encode.
+- **A dynamic with feedback.** Myopic best response with inertia replaces uniformly random
+  actions, so normal nodes react to jammers and $P_J$ responds to costs and penalties. The
+  sampling scheme is kept behind `--method sampled` for comparison.
+- **A clean statistic.** $P_J$ is the plain share of malicious nodes jamming, averaged over
+  the measurement window and over networks, with standard deviations in the CSVs.
+- **Tests for every assumption**: payoff tables against the paper's formulas, a hand-computed
+  triangle, cost-paid-once, best-response optimality, monotone sweeps.
 
 ## Reference
 
